@@ -1,0 +1,25 @@
+# Script outputs: contain real object IDs, UPNs and vault names
+KvInventory/
+KvMigration/
+output/
+*.log
+
+# Real plan files stay out of the repository; the fictional sample under data/ is the only CSV that belongs here
+plans/
+KvPlan-*.csv
+KvAccessPolicies-*.csv
+KvRoleAssignments-*.csv
+KvUsage-*.csv
+KvVerify-*.csv
+KvPermissionModel-*.csv
+!data/KvPlan-sample.csv
+
+# Test output
+testResults.xml
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store

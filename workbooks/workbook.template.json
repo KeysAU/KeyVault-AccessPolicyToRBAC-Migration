@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Deploys an Azure Monitor workbook (shared) linked to a Log Analytics workspace. Used by Deploy-KeyVaultAuditWorkbook.ps1."
+  },
+  "parameters": {
+    "workbookDisplayName": {
+      "type": "string",
+      "defaultValue": "Key Vault Audit",
+      "metadata": {
+        "description": "Display name shown in the Workbooks gallery."
+      }
+    },
+    "workbookSourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Log Analytics workspace the workbook is linked to."
+      }
+    },
+    "workbookContent": {
+      "type": "string",
+      "metadata": {
+        "description": "Serialised workbook JSON (the content of KeyVault-Audit.workbook.json with fallbackResourceIds set)."
+      }
+    },
+    "workbookId": {
+      "type": "string",
+      "defaultValue": "[newGuid()]",
+      "metadata": {
+        "description": "GUID used as the workbook resource name. Reuse the same value to update an existing workbook in place."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/workbooks",
+      "apiVersion": "2023-06-01",
+      "name": "[parameters('workbookId')]",
+      "location": "[parameters('location')]",
+      "kind": "shared",
+      "properties": {
+        "displayName": "[parameters('workbookDisplayName')]",
+        "serializedData": "[parameters('workbookContent')]",
+        "version": "1.0",
+        "sourceId": "[parameters('workbookSourceId')]",
+        "category": "workbook"
+      }
+    }
+  ],
+  "outputs": {
+    "workbookResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookId'))]"
+    }
+  }
+}

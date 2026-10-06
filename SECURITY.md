@@ -1,41 +1,22 @@
-<!-- BEGIN MICROSOFT SECURITY.MD V0.0.8 BLOCK -->
+# Security
 
-## Security
+## What this repository contains
 
-Microsoft takes the security of our software products and services seriously, which includes all source code repositories managed through our GitHub organizations, which include [Microsoft](https://github.com/microsoft), [Azure](https://github.com/Azure), [DotNet](https://github.com/dotnet), [AspNet](https://github.com/aspnet), [Xamarin](https://github.com/xamarin), and [our GitHub organizations](https://opensource.microsoft.com/).
+Scripts, a workbook definition, pipeline definitions and documentation. No tenant, subscription, workspace, group or vault identifiers from any real environment; every GUID is either a placeholder (`00000000-...`, `11111111-...`) or a public Microsoft first-party application ID used to label client apps in the workbook.
 
-If you believe you have found a security vulnerability in any Microsoft-owned repository that meets [Microsoft's definition of a security vulnerability](https://aka.ms/opensource/security/definition), please report it to us as described below.
+## What must never be committed
 
-## Reporting Security Issues
+- Plan CSVs (`KvPlan-*.csv`) and any export or verify output. They hold object IDs, UPNs, application IDs and vault names. `.gitignore` excludes them; keep them in your ITSM change record or a private repository.
+- Pipeline artifacts downloaded for evidence.
+- Credentials of any kind. The pipelines use workload identity federation and have no secret inputs beyond IDs.
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+## Blast radius of the tooling
 
-Instead, please report them to the Microsoft Security Response Center (MSRC) at [https://msrc.microsoft.com/create-report](https://aka.ms/opensource/security/create-report).
+- `Export`, `Plan`, `Verify`: read only.
+- `Groups`: creates Entra security groups and adds members. An identity holding `Group.ReadWrite.All` can add members to any group in the tenant; keep it dedicated and time-boxed.
+- `Assign`: creates role assignments. Inert on access policy vaults until the flip, live immediately on any vault in the same resource group that is already on RBAC (the script warns about these).
+- `Flip` / `Rollback`: one property write per vault. Reversible.
 
-If you prefer to submit without logging in, send email to [secure@microsoft.com](mailto:secure@microsoft.com).  If possible, encrypt your message with our PGP key; please download it from the [Microsoft Security Response Center PGP Key page](https://aka.ms/opensource/security/pgpkey).
+## Reporting a problem
 
-You should receive a response within 24 hours. If for some reason you do not, please follow up via email to ensure we received your original message. Additional information can be found at [microsoft.com/msrc](https://aka.ms/opensource/security/msrc). 
-
-Please include the requested information listed below (as much as you can provide) to help us better understand the nature and scope of the possible issue:
-
-  * Type of issue (e.g. buffer overflow, SQL injection, cross-site scripting, etc.)
-  * Full paths of source file(s) related to the manifestation of the issue
-  * The location of the affected source code (tag/branch/commit or direct URL)
-  * Any special configuration required to reproduce the issue
-  * Step-by-step instructions to reproduce the issue
-  * Proof-of-concept or exploit code (if possible)
-  * Impact of the issue, including how an attacker might exploit the issue
-
-This information will help us triage your report more quickly.
-
-If you are reporting for a bug bounty, more complete reports can contribute to a higher bounty award. Please visit our [Microsoft Bug Bounty Program](https://aka.ms/opensource/security/bounty) page for more details about our active programs.
-
-## Preferred Languages
-
-We prefer all communications to be in English.
-
-## Policy
-
-Microsoft follows the principle of [Coordinated Vulnerability Disclosure](https://aka.ms/opensource/security/cvd).
-
-<!-- END MICROSOFT SECURITY.MD BLOCK -->
+Open a GitHub issue for behaviour that could cause an unintended access grant or loss, or a documentation error that could lead someone there. Do not include identifiers from your own environment in the issue; a redacted log excerpt is enough.

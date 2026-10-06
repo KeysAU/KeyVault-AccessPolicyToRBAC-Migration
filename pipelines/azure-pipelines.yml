@@ -1,0 +1,106 @@
+# Key Vault access policy to Azure RBAC migration: manual, parameterised Azure DevOps pipeline.
+#
+# Set-up (once):
+#   1. Variable group "kv-rbac-migration" with:
+#        serviceConnection        - name of an ARM service connection (workload identity federation) whose identity holds
+#                                   the rights in docs/permissions.md
+#        logAnalyticsWorkspaceId  - workspace (customer) ID for Export usage enrichment; may be empty
+#   2. Environment "kv-rbac-migration-gated" with an Approvals check. Groups, Flip and Rollback run against it.
+#   3. Upload your plan CSV as a Secure File (Pipelines > Library > Secure files), or commit it to a private repo branch.
+#
+# Every run publishes its CSV outputs as a pipeline artifact. Nothing is stored in the repo.
+
+name: kv-rbac-${{ parameters.action }}-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+pr: none
+
+parameters:
+  - name: action
+    displayName: Action
+    type: string
+    default: Plan
+    values: [Export, Plan, Groups, Assign, Verify, Flip, Rollback]
+  - name: wave
+    displayName: Wave filter (comma separated, blank = all waves)
+    type: string
+    default: ' '
+  - name: vaultName
+    displayName: Vault name filter (comma separated, blank = all vaults)
+    type: string
+    default: ' '
+  - name: groupScope
+    displayName: Group scope for Action=Group rows
+    type: string
+    default: ResourceGroup
+    values: [Vault, ResourceGroup]
+  - name: whatIf
+    displayName: WhatIf (report only, no changes)
+    type: boolean
+    default: true
+  - name: planSource
+    displayName: Where the plan CSV comes from
+    type: string
+    default: SecureFile
+    values: [SecureFile, Repo]
+  - name: planSecureFile
+    displayName: Secure file name (planSource = SecureFile)
+    type: string
+    default: KvPlan.csv
+  - name: planRepoPath
+    displayName: Repo-relative path (planSource = Repo)
+    type: string
+    default: plans/KvPlan.csv
+  - name: usageDays
+    displayName: Usage lookback in days (Export only)
+    type: number
+    default: 90
+
+variables:
+  - group: kv-rbac-migration
+
+pool:
+  vmImage: windows-latest
+
+stages:
+  - stage: Run
+    displayName: ${{ parameters.action }}
+    jobs:
+      # State-changing actions go through an environment with an approval check
+      - ${{ if in(parameters.action, 'Groups', 'Flip', 'Rollback') }}:
+          - deployment: Gated
+            displayName: ${{ parameters.action }} (approval gated)
+            environment: kv-rbac-migration-gated
+            strategy:
+              runOnce:
+                deploy:
+                  steps:
+                    - checkout: self
+                    - template: templates/migration-steps.yml
+                      parameters:
+                        action: ${{ parameters.action }}
+                        wave: ${{ parameters.wave }}
+                        vaultName: ${{ parameters.vaultName }}
+                        groupScope: ${{ parameters.groupScope }}
+                        whatIf: ${{ parameters.whatIf }}
+                        planSource: ${{ parameters.planSource }}
+                        planSecureFile: ${{ parameters.planSecureFile }}
+                        planRepoPath: ${{ parameters.planRepoPath }}
+                        usageDays: ${{ parameters.usageDays }}
+      # Read-only actions and Assign (inert until the flip) run directly
+      - ${{ else }}:
+          - job: Run
+            displayName: ${{ parameters.action }}
+            steps:
+              - checkout: self
+              - template: templates/migration-steps.yml
+                parameters:
+                  action: ${{ parameters.action }}
+                  wave: ${{ parameters.wave }}
+                  vaultName: ${{ parameters.vaultName }}
+                  groupScope: ${{ parameters.groupScope }}
+                  whatIf: ${{ parameters.whatIf }}
+                  planSource: ${{ parameters.planSource }}
+                  planSecureFile: ${{ parameters.planSecureFile }}
+                  planRepoPath: ${{ parameters.planRepoPath }}
+                  usageDays: ${{ parameters.usageDays }}

@@ -1,0 +1,86 @@
+# Steps template shared by the gated and non-gated jobs in azure-pipelines.yml.
+parameters:
+  - name: action
+    type: string
+  - name: wave
+    type: string
+    default: ' '
+  - name: vaultName
+    type: string
+    default: ' '
+  - name: groupScope
+    type: string
+    default: ResourceGroup
+  - name: whatIf
+    type: boolean
+    default: true
+  - name: planSource
+    type: string
+    default: SecureFile
+  - name: planSecureFile
+    type: string
+    default: KvPlan.csv
+  - name: planRepoPath
+    type: string
+    default: plans/KvPlan.csv
+  - name: usageDays
+    type: number
+    default: 90
+
+steps:
+  - ${{ if and(ne(parameters.action, 'Export'), eq(parameters.planSource, 'SecureFile')) }}:
+      - task: DownloadSecureFile@1
+        name: plan
+        displayName: Download plan CSV (secure file)
+        inputs:
+          secureFile: ${{ parameters.planSecureFile }}
+
+  - task: AzurePowerShell@5
+    displayName: ${{ parameters.action }}
+    inputs:
+      azureSubscription: $(serviceConnection)
+      azurePowerShellVersion: LatestVersion
+      pwsh: true
+      ScriptType: InlineScript
+      Inline: |
+        $ErrorActionPreference = "Stop"
+        $action = "${{ parameters.action }}"
+        $scripts = Join-Path "$(Build.SourcesDirectory)" "scripts"
+        $out = "$(Build.ArtifactStagingDirectory)"
+
+        Write-Host "Az context: $((Get-AzContext).Account.Id) in tenant $((Get-AzContext).Tenant.Id)"
+
+        if ($action -eq "Export") {
+          $splat = @{ OutputFolder = (Join-Path $out "KvInventory"); UsageDays = ${{ parameters.usageDays }} }
+          if ("$(logAnalyticsWorkspaceId)".Trim()) { $splat.LogAnalyticsWorkspaceId = "$(logAnalyticsWorkspaceId)".Trim() }
+          & (Join-Path $scripts "Export-KvAccessPolicyInventory.ps1") @splat
+        }
+        else {
+          if ("${{ parameters.planSource }}" -eq "SecureFile") { $planCsv = "$(plan.secureFilePath)" }
+          else { $planCsv = Join-Path "$(Build.SourcesDirectory)" "${{ parameters.planRepoPath }}" }
+          if (-not (Test-Path $planCsv)) { throw "Plan CSV not found: $planCsv" }
+
+          $splat = @{
+            PlanCsv      = $planCsv
+            Action       = $action
+            GroupScope   = "${{ parameters.groupScope }}"
+            OutputFolder = (Join-Path $out "KvMigration")
+          }
+          $wave = "${{ parameters.wave }}".Trim()
+          if ($wave) { $splat.Wave = @($wave.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+          $vaults = "${{ parameters.vaultName }}".Trim()
+          if ($vaults) { $splat.VaultName = @($vaults.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+          if ("${{ parameters.whatIf }}" -eq "True") { $splat.WhatIf = $true; Write-Host "##[warning]WhatIf mode: no changes will be made" }
+
+          & (Join-Path $scripts "Invoke-KvRbacMigration.ps1") @splat
+        }
+
+        # The migration script exits 1 on Verify gaps or failed changes; surface that as a task failure
+        if ($LASTEXITCODE) { throw "$action finished with exit code $LASTEXITCODE. See the log above." }
+
+  - task: PublishPipelineArtifact@1
+    displayName: Publish CSV outputs
+    condition: always()
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)
+      artifact: kv-rbac-${{ parameters.action }}-$(Build.BuildId)
